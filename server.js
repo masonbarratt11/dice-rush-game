@@ -1,4 +1,4 @@
-// server.js - DICE RUSH Backend Server
+// server.js - DICE RUSH Backend Server (Fixed for Railway)
 const express = require('express');
 const { Telegraf } = require('telegraf');
 require('dotenv').config();
@@ -52,15 +52,7 @@ bot.command('stats', (ctx) => {
   const player = players[userId];
   if (!player) return ctx.reply('Not registered yet. Send /start first.');
 
-  const stats = `
-📊 YOUR STATS
-═══════════════
-Username: ${player.username}
-Balance: $${player.balance.toFixed(2)}
-Wins: ${player.wins}
-Losses: ${player.losses}
-Win Rate: ${player.wins + player.losses > 0 ? ((player.wins / (player.wins + player.losses)) * 100).toFixed(1) : 0}%
-  `;
+  const stats = `📊 YOUR STATS\n═══════════════\nUsername: ${player.username}\nBalance: $${player.balance.toFixed(2)}\nWins: ${player.wins}\nLosses: ${player.losses}\nWin Rate: ${player.wins + player.losses > 0 ? ((player.wins / (player.wins + player.losses)) * 100).toFixed(1) : 0}%`;
   ctx.reply(stats);
 });
 
@@ -77,7 +69,6 @@ bot.action('stats', (ctx) => {
   const userId = ctx.from.id;
   const player = players[userId];
   ctx.answerCbQuery();
-  
   const stats = `📊 YOUR STATS\n═══════════════\nUsername: ${player?.username}\nBalance: $${player?.balance.toFixed(2)}\nWins: ${player?.wins}\nLosses: ${player?.losses}`;
   ctx.reply(stats);
 });
@@ -92,72 +83,6 @@ app.get('/api/player/:telegramId', (req, res) => {
 
 app.post('/api/match/find', (req, res) => {
   const { telegramId, username, betAmount } = req.body;
-
   if (!players[telegramId]) return res.status(400).json({ error: 'Player not registered' });
   if (players[telegramId].balance < betAmount) return res.status(400).json({ error: 'Insufficient balance' });
-
-  if (!waitingQueue[betAmount]) waitingQueue[betAmount] = [];
-
-  if (waitingQueue[betAmount].length > 0) {
-    const opponent = waitingQueue[betAmount].pop();
-    const matchId = `match_${Date.now()}`;
-
-    players[telegramId].balance -= betAmount;
-    players[opponent.telegramId].balance -= betAmount;
-
-    activeMatches[matchId] = {
-      matchId,
-      player1: { telegramId, username },
-      player2: opponent,
-      betAmount,
-      rounds: [],
-      status: 'active',
-      createdAt: new Date()
-    };
-
-    return res.json({
-      matchId,
-      opponent: opponent.username,
-      betAmount,
-      pot: betAmount * 2
-    });
-  } else {
-    waitingQueue[betAmount].push({ telegramId, username });
-    return res.json({
-      status: 'waiting',
-      message: `Waiting for opponent at bet $${betAmount}...`,
-      queueLength: waitingQueue[betAmount].length
-    });
-  }
-});
-
-app.post('/api/match/:matchId/roll', (req, res) => {
-  const { matchId } = req.params;
-  const { telegramId, roll } = req.body;
-
-  const match = activeMatches[matchId];
-  if (!match) return res.status(404).json({ error: 'Match not found' });
-
-  if (roll < 1 || roll > 6) return res.status(400).json({ error: 'Invalid roll' });
-
-  const isPlayer1 = match.player1.telegramId === telegramId;
-  if (!isPlayer1 && match.player2.telegramId !== telegramId) {
-    return res.status(403).json({ error: 'Not part of this match' });
-  }
-
-  const roundNum = match.rounds.length + 1;
-  let roundData = match.rounds[roundNum - 1];
-
-  if (!roundData) {
-    roundData = { round: roundNum, p1Roll: null, p2Roll: null, winner: null };
-    match.rounds.push(roundData);
-  }
-
-  if (isPlayer1) {
-    roundData.p1Roll = roll;
-  } else {
-    roundData.p2Roll = roll;
-  }
-
-  if (roundData.p1Roll !== null && roundData.p2Roll !== null) {
-    if (roundData.p1Roll >
+  if (!waitingQueue[betAmount]) waitingQueue
