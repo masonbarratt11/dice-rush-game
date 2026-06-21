@@ -1,4 +1,4 @@
-// server.js - DICE RUSH Backend Server (Complete)
+// server.js - DICE RUSH Backend Server (Polling Mode)
 const express = require('express');
 const { Telegraf } = require('telegraf');
 require('dotenv').config();
@@ -204,11 +204,6 @@ app.get('/health', (req, res) => {
   res.json({ status: 'DICE RUSH server is running! 🎲' });
 });
 
-app.post('/webhook', (req, res) => {
-  bot.handleUpdate(req.body);
-  res.send('ok');
-});
-
 app.get('/game', (req, res) => {
   res.send(`<!DOCTYPE html><html><head><title>DICE RUSH</title><meta name="viewport" content="width=device-width, initial-scale=1"><style>*{margin:0;padding:0;box-sizing:border-box}body{background:linear-gradient(135deg,#0f5f2f,#1a8c4d);color:white;font-family:Arial,sans-serif;padding:16px;min-height:100vh}.container{max-width:400px;margin:0 auto}h1{text-align:center;font-size:32px;margin-bottom:20px}.card{background:rgba(0,0,0,0.3);padding:16px;border-radius:8px;margin-bottom:12px;border:1px solid #00ff00}.balance{font-size:24px;font-weight:bold;color:#ffd700}button{width:100%;padding:12px;background:linear-gradient(135deg,#ff6b00,#ff8800);color:white;border:none;border-radius:6px;cursor:pointer;font-weight:bold;margin-bottom:8px;font-size:14px}button:hover{opacity:0.9}.dice{font-size:48px;text-align:center;margin:16px 0}.input{width:100%;padding:10px;background:#1a1a2e;border:1px solid #ffd700;color:white;border-radius:4px;margin-bottom:8px;font-size:14px}</style></head><body><div class="container"><h1>🎲 DICE RUSH</h1><div class="card"><div style="font-size:12px;color:#888;margin-bottom:4px;">Balance</div><div class="balance" id="balance">$100.00</div></div><div class="card"><div style="font-size:12px;color:#ffd700;margin-bottom:8px;font-weight:bold;">Set Bet Amount</div><input type="number" id="betAmount" class="input" value="5" min="1" placeholder="Enter bet amount"><button onclick="findOpponent()">🎯 Find Opponent</button></div></div><script>let telegramId=Math.random();let matchId=null;async function findOpponent(){const betAmount=parseFloat(document.getElementById('betAmount').value);const response=await fetch('/api/match/find',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telegramId,username:'Player',betAmount})});const data=await response.json();matchId=data.matchId;if(data.matchId){alert('Opponent found! Game ready.');}else{alert(data.message||'Searching for opponent...');}}</script></body></html>`);
 });
@@ -219,3 +214,16 @@ app.listen(PORT, () => {
   console.log(`🎲 DICE RUSH Server running on port ${PORT}`);
   console.log(`Game URL: http://localhost:${PORT}/game`);
 });
+
+// Launch bot with polling (long polling - bot asks Telegram for updates)
+bot.launch({
+  allowedUpdates: ['message', 'callback_query']
+}).then(() => {
+  console.log('🤖 DICE RUSH Bot started with polling mode!');
+}).catch(err => {
+  console.error('Bot launch error:', err);
+});
+
+// Graceful shutdown
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
