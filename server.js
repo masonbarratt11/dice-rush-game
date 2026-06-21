@@ -137,8 +137,13 @@ app.get('/game', (req, res) => {
     button.purple { background: linear-gradient(135deg,#7c3aed,#a855f7); }
     input { width: 100%; padding: 10px; background: #1a1a2e; border: 1px solid #ffd700; color: white; border-radius: 4px; margin-bottom: 8px; font-size: 14px; }
     .hidden { display: none; }
-    .dice-container { display: flex; justify-content: center; gap: 20px; margin: 20px 0; }
-    .dice { width: 80px; height: 80px; background: white; border: 2px solid #333; border-radius: 6px; display: grid; grid-template-columns: repeat(3,1fr); padding: 6px; gap: 3px; }
+    .dice-container { display: flex; justify-content: center; gap: 20px; margin: 20px 0; perspective: 1000px; }
+    .dice { width: 80px; height: 80px; background: white; border: 2px solid #333; border-radius: 6px; display: grid; grid-template-columns: repeat(3,1fr); padding: 6px; gap: 3px; transition: transform 0.3s ease-out; }
+    .dice.rolling { animation: roll 0.8s ease-out; }
+    @keyframes roll { 
+      0% { transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
+      100% { transform: rotateX(720deg) rotateY(720deg) rotateZ(720deg); }
+    }
     .pip { width: 12px; height: 12px; background: red; border-radius: 50%; }
     .pip.empty { background: transparent; }
     .vs { font-size: 18px; color: #ffd700; font-weight: bold; align-self: center; }
@@ -224,6 +229,8 @@ async function loadMatch() {
 
 async function roll() {
   const n = Math.floor(Math.random()*6)+1;
+  document.getElementById('d1').classList.add('rolling');
+  document.getElementById('d2').classList.add('rolling');
   try {
     const res = await fetch(API + '/api/match/' + mid + '/roll', {
       method: 'POST',
@@ -232,9 +239,13 @@ async function roll() {
     });
     const data = await res.json();
     match = data.match;
-    updateUI();
-    if(data.matchComplete) { endGame(data); }
-    else { document.getElementById('rollBtn').classList.add('hidden'); document.getElementById('nextBtn').classList.remove('hidden'); }
+    setTimeout(() => {
+      document.getElementById('d1').classList.remove('rolling');
+      document.getElementById('d2').classList.remove('rolling');
+      updateUI();
+      if(data.matchComplete) { endGame(data); }
+      else { document.getElementById('rollBtn').classList.add('hidden'); document.getElementById('nextBtn').classList.remove('hidden'); }
+    }, 800);
   } catch(e) { alert('Error: ' + e.message); }
 }
 
