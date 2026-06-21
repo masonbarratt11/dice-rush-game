@@ -51,10 +51,11 @@ app.get('/api/match/:matchId', (req, res) => {
 app.post('/api/match/:matchId/roll', (req, res) => {
   const match = activeMatches[req.params.matchId];
   if (!match) return res.status(404).json({ error: 'Not found' });
-  const playerRoll = req.body.roll;
   
+  const playerRoll = req.body.roll;
   const roundNum = match.rounds.length + 1;
   let roundData = match.rounds[roundNum - 1];
+  
   if (!roundData) {
     roundData = { p1Roll: null, p2Roll: null, winner: null };
     match.rounds.push(roundData);
@@ -62,45 +63,40 @@ app.post('/api/match/:matchId/roll', (req, res) => {
   
   roundData.p1Roll = playerRoll;
   
-  // Generate bot roll - ensure it's different from player roll
+  // Bot roll: generate random, ensure different from player
   let botRoll = Math.floor(Math.random() * 6) + 1;
-  while (botRoll === playerRoll) {
+  
+  // Keep rolling until different
+  let attempts = 0;
+  while (botRoll === playerRoll && attempts < 10) {
     botRoll = Math.floor(Math.random() * 6) + 1;
+    attempts++;
   }
   
-  // 65% chance bot wins - if bot should win but rolled lower, give it higher number
-  const botShouldWin = Math.random() < 0.65;
-  if (botShouldWin && botRoll < playerRoll) {
-    botRoll = playerRoll + 1;
-    if (botRoll > 6) botRoll = 6;
-  } else if (!botShouldWin && botRoll > playerRoll) {
-    botRoll = playerRoll - 1;
-    if (botRoll < 1) botRoll = 1;
-  }
-  
-  // Ensure still different
+  // If still same (unlikely), pick a different number
   if (botRoll === playerRoll) {
-    botRoll = botRoll === 6 ? 5 : botRoll + 1;
+    botRoll = playerRoll === 6 ? 1 : playerRoll + 1;
   }
   
   roundData.p2Roll = botRoll;
   
-  // Determine winner
-  if (roundData.p1Roll > roundData.p2Roll) {
-    roundData.winner = 1;
+  // Determine winner with bot bias (65% win rate)
+  let winner = 1;
+  if (Math.random() < 0.65) {
+    // Bot wins 65% of time
+    winner = 2;
   } else {
-    roundData.winner = 2;
+    // Player wins 35% of time
+    winner = 1;
   }
   
-  // Best of 1 - match ends immediately
+  roundData.winner = winner;
   match.status = 'completed';
-  const winner = roundData.winner;
-  const prize = match.betAmount * 2 * 0.97;
-  const winnerId = winner === 1 ? req.body.telegramId : 'bot';
   
-  if (winnerId !== 'bot') {
-    players[winnerId].balance += prize;
-    players[winnerId].wins++;
+  const prize = match.betAmount * 2 * 0.97;
+  if (winner === 1) {
+    players[req.body.telegramId].balance += prize;
+    players[req.body.telegramId].wins++;
   }
   
   return res.json({
