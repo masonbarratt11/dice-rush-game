@@ -438,7 +438,9 @@ async function loadMatch() {
   try {
     const response = await fetch(API_BASE + "/api/match/" + matchId);
     currentMatch = await response.json();
-    updateDisplay();
+    if(currentMatch && currentMatch.rounds) {
+      updateDisplay();
+    }
   } catch(error) {
     console.error("Error loading match:", error);
   }
@@ -475,6 +477,7 @@ function nextRound() {
 }
 
 function updateDisplay() {
+  if(!currentMatch || !currentMatch.rounds || currentMatch.rounds.length === 0) return;
   const lastRound = currentMatch.rounds[currentMatch.rounds.length-1];
   if(lastRound) {
     document.getElementById("roundNum").textContent = lastRound.round;
