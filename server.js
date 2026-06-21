@@ -62,19 +62,25 @@ app.post('/api/match/:matchId/roll', (req, res) => {
   
   roundData.p1Roll = playerRoll;
   
-  // Bot logic: 65% chance to win
-  let botRoll;
-  const botWins = Math.random() < 0.65;
+  // Generate bot roll - ensure it's different from player roll
+  let botRoll = Math.floor(Math.random() * 6) + 1;
+  while (botRoll === playerRoll) {
+    botRoll = Math.floor(Math.random() * 6) + 1;
+  }
   
-  if (botWins) {
-    // Bot wins: roll higher than player
-    botRoll = playerRoll + Math.floor(Math.random() * (7 - playerRoll));
+  // 65% chance bot wins - if bot should win but rolled lower, give it higher number
+  const botShouldWin = Math.random() < 0.65;
+  if (botShouldWin && botRoll < playerRoll) {
+    botRoll = playerRoll + 1;
     if (botRoll > 6) botRoll = 6;
-    if (botRoll <= playerRoll) botRoll = playerRoll + 1;
-  } else {
-    // Player wins: roll lower than player
-    botRoll = Math.floor(Math.random() * playerRoll);
-    if (botRoll === 0 || botRoll === playerRoll) botRoll = playerRoll - 1;
+  } else if (!botShouldWin && botRoll > playerRoll) {
+    botRoll = playerRoll - 1;
+    if (botRoll < 1) botRoll = 1;
+  }
+  
+  // Ensure still different
+  if (botRoll === playerRoll) {
+    botRoll = botRoll === 6 ? 5 : botRoll + 1;
   }
   
   roundData.p2Roll = botRoll;
@@ -82,17 +88,13 @@ app.post('/api/match/:matchId/roll', (req, res) => {
   // Determine winner
   if (roundData.p1Roll > roundData.p2Roll) {
     roundData.winner = 1;
-    match.player1Wins = 1;
-  } else if (roundData.p2Roll > roundData.p1Roll) {
-    roundData.winner = 2;
-    match.player2Wins = 1;
   } else {
-    roundData.winner = 0;
+    roundData.winner = 2;
   }
   
   // Best of 1 - match ends immediately
   match.status = 'completed';
-  const winner = roundData.winner === 1 ? 1 : 2;
+  const winner = roundData.winner;
   const prize = match.betAmount * 2 * 0.97;
   const winnerId = winner === 1 ? req.body.telegramId : 'bot';
   
