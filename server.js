@@ -1,4 +1,4 @@
-// server.js - DICE RUSH Backend Server (Bot Opponent Feature)
+// server.js - DICE RUSH Backend Server (Bot Opponent Feature - FIXED)
 const express = require('express');
 const { Telegraf } = require('telegraf');
 require('dotenv').config();
@@ -84,8 +84,6 @@ app.get('/api/player/:telegramId', (req, res) => {
 app.post('/api/match/find', (req, res) => {
   const { telegramId, username, betAmount } = req.body;
   
-  console.log(`[MATCH FIND] User: ${telegramId}, Bet: $${betAmount}`);
-  
   if (!players[telegramId]) {
     players[telegramId] = {
       username: username || `User_${telegramId}`,
@@ -137,8 +135,6 @@ app.post('/api/match/find', (req, res) => {
 app.post('/api/match/vs-bot', (req, res) => {
   const { telegramId, username, betAmount } = req.body;
   
-  console.log(`[BOT MATCH] User: ${telegramId}, Bet: $${betAmount}`);
-  
   if (!players[telegramId]) {
     players[telegramId] = {
       username: username || `User_${telegramId}`,
@@ -157,7 +153,7 @@ app.post('/api/match/vs-bot', (req, res) => {
   activeMatches[matchId] = {
     matchId,
     player1: { telegramId, username },
-    player2: { telegramId: 'bot', username: '🤖 Bot' },
+    player2: { telegramId: 'bot', username: 'Bot' },
     betAmount,
     rounds: [],
     status: 'active',
@@ -167,7 +163,7 @@ app.post('/api/match/vs-bot', (req, res) => {
   
   return res.json({
     matchId,
-    opponent: '🤖 Bot',
+    opponent: 'Bot',
     betAmount,
     pot: betAmount * 2,
     isBot: true
@@ -201,7 +197,6 @@ app.post('/api/match/:matchId/roll', (req, res) => {
     roundData.p2Roll = roll;
   }
   
-  // If bot match and player rolled, bot rolls automatically
   if (match.isBot && isPlayer1 && roundData.p2Roll === null) {
     roundData.p2Roll = Math.floor(Math.random() * 6) + 1;
   }
@@ -266,171 +261,27 @@ app.get('/api/leaderboard', (req, res) => {
 });
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'DICE RUSH server is running! 🎲' });
+  res.json({ status: 'DICE RUSH server is running!' });
 });
 
 app.get('/game', (req, res) => {
   const apiBase = process.env.GAME_URL ? process.env.GAME_URL.replace('/game', '') : 'https://dice-rush-game-production.up.railway.app';
-  
-  res.send(`<!DOCTYPE html>
-<html>
-<head>
-  <title>DICE RUSH</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      background: linear-gradient(135deg, #0f5f2f, #1a8c4d);
-      color: white;
-      font-family: Arial, sans-serif;
-      padding: 16px;
-      min-height: 100vh;
-    }
-    .container {
-      max-width: 400px;
-      margin: 0 auto;
-    }
-    h1 {
-      text-align: center;
-      font-size: 32px;
-      margin-bottom: 20px;
-    }
-    .card {
-      background: rgba(0, 0, 0, 0.3);
-      padding: 16px;
-      border-radius: 8px;
-      margin-bottom: 12px;
-      border: 1px solid #00ff00;
-    }
-    .balance {
-      font-size: 24px;
-      font-weight: bold;
-      color: #ffd700;
-    }
-    button {
-      width: 100%;
-      padding: 12px;
-      background: linear-gradient(135deg, #ff6b00, #ff8800);
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-weight: bold;
-      margin-bottom: 8px;
-      font-size: 14px;
-    }
-    button:hover {
-      opacity: 0.9;
-    }
-    button.bot-btn {
-      background: linear-gradient(135deg, #7c3aed, #a855f7);
-    }
-    .input {
-      width: 100%;
-      padding: 10px;
-      background: #1a1a2e;
-      border: 1px solid #ffd700;
-      color: white;
-      border-radius: 4px;
-      margin-bottom: 8px;
-      font-size: 14px;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>🎲 DICE RUSH</h1>
-    <div class="card">
-      <div style="font-size:12px;color:#888;margin-bottom:4px;">Balance</div>
-      <div class="balance" id="balance">$100.00</div>
-    </div>
-    <div class="card">
-      <div style="font-size:12px;color:#ffd700;margin-bottom:8px;font-weight:bold;">Set Bet Amount</div>
-      <input type="number" id="betAmount" class="input" value="5" min="1" placeholder="Enter bet amount">
-      <button onclick="findOpponent()">🎯 Find Opponent</button>
-      <button class="bot-btn" onclick="playBot()">🤖 Play Bot</button>
-    </div>
-  </div>
-  
-  <script>
-    const API_BASE = '${apiBase}';
-    let telegramId = Math.random().toString();
-    let matchId = null;
-    
-    async function findOpponent() {
-      const betAmount = parseFloat(document.getElementById('betAmount').value);
-      const apiUrl = API_BASE + '/api/match/find';
-      
-      console.log('Finding opponent at:', apiUrl);
-      
-      try {
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            telegramId: telegramId,
-            username: 'Player',
-            betAmount: betAmount
-          })
-        });
-        
-        const data = await response.json();
-        
-        if (data.matchId) {
-          matchId = data.matchId;
-          alert('🎉 Opponent found! Game ready.\\nOpponent: ' + data.opponent);
-        } else {
-          alert(data.message || 'Searching for opponent...');
-        }
-      } catch (error) {
-        alert('Error: ' + error.message);
-      }
-    }
-    
-    async function playBot() {
-      const betAmount = parseFloat(document.getElementById('betAmount').value);
-      const apiUrl = API_BASE + '/api/match/vs-bot';
-      
-      try {
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            telegramId: telegramId,
-            username: 'Player',
-            betAmount: betAmount
-          })
-        });
-        
-        const data = await response.json();
-        
-        if (data.matchId) {
-          matchId = data.matchId;
-          alert('🤖 Bot match started!\\nOpponent: ' + data.opponent + '\\nPot: $' + data.pot);
-        } else {
-          alert('Error: ' + (data.error || 'Could not start bot match'));
-        }
-      } catch (error) {
-        alert('Error: ' + error.message);
-      }
-    }
-  </script>
-</body>
-</html>`);
+  const html = '<!DOCTYPE html><html><head><title>DICE RUSH</title><meta name="viewport" content="width=device-width, initial-scale=1"><style>*{margin:0;padding:0;box-sizing:border-box}body{background:linear-gradient(135deg,#0f5f2f,#1a8c4d);color:white;font-family:Arial,sans-serif;padding:16px;min-height:100vh}.container{max-width:400px;margin:0 auto}h1{text-align:center;font-size:32px;margin-bottom:20px}.card{background:rgba(0,0,0,0.3);padding:16px;border-radius:8px;margin-bottom:12px;border:1px solid #00ff00}.balance{font-size:24px;font-weight:bold;color:#ffd700}button{width:100%;padding:12px;background:linear-gradient(135deg,#ff6b00,#ff8800);color:white;border:none;border-radius:6px;cursor:pointer;font-weight:bold;margin-bottom:8px;font-size:14px}button:hover{opacity:0.9}button.bot-btn{background:linear-gradient(135deg,#7c3aed,#a855f7)}.input{width:100%;padding:10px;background:#1a1a2e;border:1px solid #ffd700;color:white;border-radius:4px;margin-bottom:8px;font-size:14px}</style></head><body><div class="container"><h1>🎲 DICE RUSH</h1><div class="card"><div style="font-size:12px;color:#888;margin-bottom:4px;">Balance</div><div class="balance" id="balance">$100.00</div></div><div class="card"><div style="font-size:12px;color:#ffd700;margin-bottom:8px;font-weight:bold;">Set Bet Amount</div><input type="number" id="betAmount" class="input" value="5" min="1" placeholder="Enter bet amount"><button onclick="findOpponent()">🎯 Find Opponent</button><button class="bot-btn" onclick="playBot()">🤖 Play Bot</button></div></div><script>const API_BASE="' + apiBase + '";let telegramId=Math.random().toString();let matchId=null;async function findOpponent(){const betAmount=parseFloat(document.getElementById("betAmount").value);const apiUrl=API_BASE+"/api/match/find";try{const response=await fetch(apiUrl,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({telegramId:telegramId,username:"Player",betAmount:betAmount})});const data=await response.json();if(data.matchId){matchId=data.matchId;alert("Opponent found! Game ready.");}else{alert(data.message||"Searching for opponent...");}}catch(error){alert("Error: "+error.message);}}async function playBot(){const betAmount=parseFloat(document.getElementById("betAmount").value);const apiUrl=API_BASE+"/api/match/vs-bot";try{const response=await fetch(apiUrl,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({telegramId:telegramId,username:"Player",betAmount:betAmount})});const data=await response.json();if(data.matchId){matchId=data.matchId;alert("Bot match started! Opponent: "+data.opponent+" Pot: $"+data.pot);}else{alert("Error: "+(data.error||"Could not start bot match"));}}catch(error){alert("Error: "+error.message);}}</script></body></html>';
+  res.send(html);
 });
 
 const PORT = process.env.PORT || 3001;
 
 app.listen(PORT, () => {
-  console.log(\`🎲 DICE RUSH Server running on port \${PORT}\`);
+  console.log('DICE RUSH Server running on port ' + PORT);
 });
 
 bot.launch({
   allowedUpdates: ['message', 'callback_query']
 }).then(() => {
-  console.log('🤖 DICE RUSH Bot started!');
+  console.log('Bot started!');
 }).catch(err => {
-  console.error('Bot launch error:', err);
+  console.error('Bot error:', err);
 });
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
