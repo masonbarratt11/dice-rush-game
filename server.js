@@ -8,9 +8,9 @@ app.use(express.json());
 app.use(cors());
 
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
-
 const players = {};
 const activeMatches = {};
+const diceRolls = {}; // Store dice rolls: userId -> value
 
 bot.start(async (ctx) => {
   const userId = ctx.from.id;
@@ -25,6 +25,13 @@ bot.start(async (ctx) => {
   });
 });
 
+// Listen for dice messages
+bot.on('dice', async (ctx) => {
+  const userId = ctx.from.id;
+  const diceValue = ctx.message.dice.value; // Gets 1-6
+  diceRolls[userId] = diceValue;
+});
+
 app.post('/api/match/vs-bot', (req, res) => {
   const { telegramId, username, betAmount } = req.body;
   if (!players[telegramId]) {
@@ -36,73 +43,45 @@ app.post('/api/match/vs-bot', (req, res) => {
   const matchId = `match_${Date.now()}`;
   players[telegramId].balance -= betAmount;
   activeMatches[matchId] = {
-    matchId, player1: { telegramId, username }, player2: { telegramId: 'bot', username: 'Bot' },
-    betAmount, rounds: [], player1Wins: 0, player2Wins: 0
+    matchId,
+    telegramId,
+    betAmount,
+    playerRoll: null,
+    botRoll: null,
+    winner: null
   };
   res.json({ matchId, opponent: 'Bot', betAmount, pot: betAmount * 2 });
-});
-
-app.get('/api/match/:matchId', (req, res) => {
-  const match = activeMatches[req.params.matchId];
-  if (!match) return res.status(404).json({ error: 'Not found' });
-  res.json(match);
 });
 
 app.post('/api/match/:matchId/roll', (req, res) => {
   const match = activeMatches[req.params.matchId];
   if (!match) return res.status(404).json({ error: 'Not found' });
-  
-  const playerRoll = req.body.roll;
-  const roundNum = match.rounds.length + 1;
-  let roundData = match.rounds[roundNum - 1];
-  
-  if (!roundData) {
-    roundData = { p1Roll: null, p2Roll: null, winner: null };
-    match.rounds.push(roundData);
-  }
-  
-  roundData.p1Roll = playerRoll;
-  
-  // Bot roll: generate random, ensure different from player
-  let botRoll = Math.floor(Math.random() * 6) + 1;
-  
-  // Keep rolling until different
-  let attempts = 0;
-  while (botRoll === playerRoll && attempts < 10) {
-    botRoll = Math.floor(Math.random() * 6) + 1;
-    attempts++;
-  }
-  
-  // If still same (unlikely), pick a different number
-  if (botRoll === playerRoll) {
-    botRoll = playerRoll === 6 ? 1 : playerRoll + 1;
-  }
-  
-  roundData.p2Roll = botRoll;
-  
-  // Determine winner with bot bias (65% win rate)
-  let winner = 1;
-  if (Math.random() < 0.65) {
-    // Bot wins 65% of time
-    winner = 2;
-  } else {
-    // Player wins 35% of time
-    winner = 1;
-  }
-  
-  roundData.winner = winner;
-  match.status = 'completed';
-  
+
+  const playerRoll = req.body.roll; // 1-6 from Telegram dice
+
+  // Bot rolls - guarantee different number
+  const available = [1, 2, 3, 4, 5, 6].filter(n => n !== playerRoll);
+  const botRoll = available[Math.floor(Math.random() * available.length)];
+
+  match.playerRoll = playerRoll;
+  match.botRoll = botRoll;
+
+  // Winner: 65% bot, 35% player
+  const winner = Math.random() < 0.65 ? 2 : 1;
+  match.winner = winner;
+
   const prize = match.betAmount * 2 * 0.97;
   if (winner === 1) {
     players[req.body.telegramId].balance += prize;
     players[req.body.telegramId].wins++;
   }
-  
+
   return res.json({
     matchComplete: true,
     winner,
     prize: prize.toFixed(2),
+    playerRoll,
+    botRoll,
     newBalance: winner === 1 ? players[req.body.telegramId].balance.toFixed(2) : '0'
   });
 });
@@ -111,11 +90,12 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 app.get('/game', (req, res) => {
   const apiBase = process.env.GAME_URL ? process.env.GAME_URL.replace('/game', '') : 'https://dice-rush-game-production.up.railway.app';
-  res.send(`<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>DICE RUSH</title><style>*{margin:0;padding:0;box-sizing:border-box}body{background:linear-gradient(135deg,#0f5f2f,#1a8c4d);color:white;font-family:Arial;padding:16px;min-height:100vh}.container{max-width:500px;margin:0 auto}h1{text-align:center;font-size:28px;margin-bottom:20px}.card{background:rgba(0,0,0,0.3);padding:16px;border-radius:8px;margin-bottom:12px;border:1px solid #00ff00}.balance{font-size:24px;font-weight:bold;color:#ffd700}button{width:100%;padding:12px;background:linear-gradient(135deg,#ff6b00,#ff8800);color:white;border:none;border-radius:6px;cursor:pointer;font-weight:bold;margin-bottom:8px;font-size:14px}button:hover{opacity:0.9}button.purple{background:linear-gradient(135deg,#7c3aed,#a855f7)}input{width:100%;padding:10px;background:#1a1a2e;border:1px solid #ffd700;color:white;border-radius:4px;margin-bottom:8px;font-size:14px}.hidden{display:none}.dice-scene{display:flex;justify-content:center;gap:30px;margin:20px 0;perspective:1500px;height:150px}.dice-wrapper{position:relative;width:120px;height:120px}.dice-3d{width:100%;height:100%;position:relative;transform-style:preserve-3d;transition:transform 0.1s;animation:roll-dice 1.5s ease-out}.dice-3d.rolling{animation:roll-dice 1.5s cubic-bezier(0.34,1.56,0.64,1)}.face{position:absolute;width:120px;height:120px;background:linear-gradient(135deg,#f5f5f5,#ffffff);border:3px solid #333;border-radius:8px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px;backface-visibility:hidden;box-shadow:0 8px 16px rgba(0,0,0,0.4)}.face1{transform:translateZ(60px)}.face2{transform:rotateY(180deg) translateZ(60px)}.face3{transform:rotateY(90deg) translateZ(60px)}.face4{transform:rotateY(-90deg) translateZ(60px)}.face5{transform:rotateX(90deg) translateZ(60px)}.face6{transform:rotateX(-90deg) translateZ(60px)}.pip{width:16px;height:16px;background:#ff0000;border-radius:50%;justify-self:center;align-self:center}@keyframes roll-dice{0%{transform:rotateX(0deg) rotateY(0deg) rotateZ(0deg)}25%{transform:rotateX(360deg) rotateY(360deg)}50%{transform:rotateX(540deg) rotateY(720deg)}75%{transform:rotateX(720deg) rotateY(1080deg)}100%{transform:rotateX(720deg) rotateY(1080deg)}}.vs{font-size:20px;color:#ffd700;font-weight:bold;align-self:center}</style></head><body><div class="container"><h1>🎲 DICE RUSH</h1><div id="setup"><div class="card"><div style="color:#888;font-size:12px">Balance</div><div class="balance" id="balance">$100.00</div></div><div class="card"><input type="number" id="bet" value="5" min="1"><button onclick="start()">🤖 Play Bot</button></div></div><div id="game" class="hidden"><div class="card" style="text-align:center"><h2 id="status">Match: 0-0</h2><div id="opponent" style="color:#ffd700;margin-top:8px">vs Bot</div><div style="color:#888;font-size:12px;margin-top:8px">Pot: $<span id="pot">0</span></div></div><div class="card" style="text-align:center"><div style="color:#ffd700;font-size:12px;margin-bottom:12px">Round <span id="round">1</span></div><div class="dice-scene"><div class="dice-wrapper"><div class="dice-3d" id="d1"><div class="face face1"><div class="pip"></div></div><div class="face face2"><div class="pip"></div><div class="pip"></div><div style="grid-column:1/4"></div><div class="pip"></div><div class="pip"></div></div><div class="face face3"><div class="pip"></div><div class="pip"></div><div style="grid-column:1/4"></div><div class="pip"></div><div class="pip"></div><div style="grid-column:1/4"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div></div><div class="face face4"><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div></div><div class="face face5"><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div></div><div class="face face6"><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div></div></div></div><div class="vs">vs</div><div class="dice-wrapper"><div class="dice-3d" id="d2"><div class="face face1"><div class="pip"></div></div><div class="face face2"><div class="pip"></div><div class="pip"></div><div style="grid-column:1/4"></div><div class="pip"></div><div class="pip"></div></div><div class="face face3"><div class="pip"></div><div class="pip"></div><div style="grid-column:1/4"></div><div class="pip"></div><div class="pip"></div><div style="grid-column:1/4"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div></div><div class="face face4"><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div></div><div class="face face5"><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div></div><div class="face face6"><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div></div></div></div></div><div id="result" style="margin-top:12px;color:#00ff00;font-weight:bold"></div></div><button id="rollBtn" onclick="roll()">🎲 Roll</button><button id="nextBtn" onclick="next()" class="hidden">→ Next</button><div id="end" class="card hidden" style="text-align:center"><h2 id="endText"></h2><div id="prize" style="color:#ffd700;margin-top:8px"></div><button onclick="again()" class="purple">Play Again</button></div></div></div><script>const API="${apiBase}";let tid=Math.random().toString(),mid=null,m=null;const rot={1:{x:0,y:0},2:{x:180,y:0},3:{x:0,y:90},4:{x:0,y:-90},5:{x:90,y:0},6:{x:-90,y:0}};async function start(){const bet=parseFloat(document.getElementById('bet').value);try{const r=await fetch(API+'/api/match/vs-bot',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telegramId:tid,username:'Player',betAmount:bet})});const d=await r.json();if(d.matchId){mid=d.matchId;document.getElementById('setup').classList.add('hidden');document.getElementById('game').classList.remove('hidden');document.getElementById('pot').textContent=d.pot;load()}}catch(e){alert('Error: '+e.message)}}async function load(){const r=await fetch(API+'/api/match/'+mid);m=await r.json()}async function roll(){const n=Math.floor(Math.random()*6)+1;document.getElementById('d1').classList.add('rolling');document.getElementById('d2').classList.add('rolling');const r=await fetch(API+'/api/match/'+mid+'/roll',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telegramId:tid,roll:n})});const d=await r.json();m=d.match;setTimeout(()=>{document.getElementById('d1').classList.remove('rolling');document.getElementById('d2').classList.remove('rolling');show();update();if(d.matchComplete)end(d);else{document.getElementById('rollBtn').classList.add('hidden');document.getElementById('nextBtn').classList.remove('hidden')}},1500)}function show(){if(!m||!m.rounds||m.rounds.length===0)return;const r=m.rounds[m.rounds.length-1];if(r){if(r.p1Roll){const o=rot[r.p1Roll];document.getElementById('d1').style.transform=\`rotateX(\${o.x}deg) rotateY(\${o.y}deg)\`}if(r.p2Roll){const o=rot[r.p2Roll];document.getElementById('d2').style.transform=\`rotateX(\${o.x}deg) rotateY(\${o.y}deg)\`}}}function next(){document.getElementById('rollBtn').classList.remove('hidden');document.getElementById('nextBtn').classList.add('hidden');document.getElementById('d1').style.transform='rotateX(0deg) rotateY(0deg)';document.getElementById('d2').style.transform='rotateX(0deg) rotateY(0deg)';document.getElementById('result').textContent=''}function update(){if(!m||!m.rounds||m.rounds.length===0)return;const r=m.rounds[m.rounds.length-1];if(r){document.getElementById('round').textContent=r.round||1;if(r.winner===1)document.getElementById('result').textContent='✓ You won!';else if(r.winner===2)document.getElementById('result').textContent='✗ Bot won';else document.getElementById('result').textContent='= Tie!'}document.getElementById('status').textContent='Match: '+(m.player1Wins||0)+'-'+(m.player2Wins||0)}function end(d){document.getElementById('rollBtn').classList.add('hidden');document.getElementById('nextBtn').classList.add('hidden');document.getElementById('game').querySelector('.card:nth-child(2)').classList.add('hidden');document.getElementById('end').classList.remove('hidden');document.getElementById('endText').textContent=d.winner===1?'🎉 YOU WON!':'😢 YOU LOST';document.getElementById('prize').textContent=d.winner===1?'Prize: $'+d.prize:'Better luck next time!';document.getElementById('balance').textContent='$'+d.newBalance}function again(){document.getElementById('setup').classList.remove('hidden');document.getElementById('game').classList.add('hidden');document.getElementById('game').querySelector('.card:nth-child(2)').classList.remove('hidden');document.getElementById('end').classList.add('hidden');mid=null;m=null}</script></body></html>`);
+  res.send(`<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>DICE RUSH</title><style>*{margin:0;padding:0;box-sizing:border-box}body{background:linear-gradient(135deg,#0f5f2f,#1a8c4d);color:white;font-family:Arial,sans-serif;padding:16px;min-height:100vh}.container{max-width:500px;margin:0 auto}h1{text-align:center;font-size:32px;margin-bottom:20px}h2{font-size:24px;color:#ffd700}.card{background:rgba(0,0,0,0.3);padding:16px;border-radius:8px;margin-bottom:12px;border:2px solid #00ff00}.balance{font-size:28px;font-weight:bold;color:#ffd700;text-align:center}button{width:100%;padding:14px;background:linear-gradient(135deg,#ff6b00,#ff8800);color:white;border:none;border-radius:6px;cursor:pointer;font-weight:bold;margin-bottom:10px;font-size:16px;transition:all 0.3s}button:hover{transform:scale(1.05);opacity:0.9}button:disabled{opacity:0.5;cursor:not-allowed}input{width:100%;padding:12px;background:#1a1a2e;border:2px solid #ffd700;color:white;border-radius:4px;margin-bottom:10px;font-size:16px}.hidden{display:none}.dice-display{display:flex;justify-content:center;gap:40px;margin:30px 0;font-size:80px;align-items:center}.dice-box{text-align:center;padding:20px;background:rgba(255,255,255,0.1);border-radius:8px;min-width:100px}.dice-value{font-size:48px;color:#ffd700;margin-top:10px;font-weight:bold}.vs-text{font-size:28px;color:#ffd700}#result{font-size:24px;font-weight:bold;margin:20px 0;text-align:center;min-height:40px}.end-message{text-align:center;padding:20px;background:rgba(255,215,0,0.1);border-radius:8px;margin-top:20px}.prize-text{color:#00ff00;font-size:20px;font-weight:bold}.info{background:rgba(0,0,0,0.5);padding:12px;border-radius:4px;margin-bottom:12px;font-size:12px;color:#888}</style></head><body><div class="container"><h1>🎲 DICE RUSH</h1><div class="info">💡 Tip: Roll dice in Telegram chat, then submit your roll here!</div><div id="setup"><div class="card"><div style="color:#888;font-size:14px;margin-bottom:8px">💰 Balance</div><div class="balance" id="balance">$100.00</div></div><div class="card"><label style="color:#888;font-size:14px">Bet Amount:</label><input type="number" id="bet" value="5" min="1" max="100"><button onclick="startGame()">🤖 Play Bot</button></div></div><div id="game" class="hidden"><div class="card" style="text-align:center"><h2>Match: 0-0</h2><div style="color:#ffd700;margin-top:8px">vs Bot</div><div style="color:#888;font-size:12px;margin-top:8px">Pot: $<span id="pot">0</span></div></div><div class="card"><div style="color:#ffd700;text-align:center;margin-bottom:20px;font-size:18px">Round 1</div><div class="dice-display"><div class="dice-box"><span id="p1dice">?</span><div class="dice-value" id="p1val"></div></div><div class="vs-text">vs</div><div class="dice-box"><span id="p2dice">🎲</span><div class="dice-value" id="p2val"></div></div></div><div id="result"></div><div class="info">📱 Roll a dice 🎲 in your Telegram chat, then click "Submit Roll"</div></div><button id="rollBtn" onclick="roll()" style="background:linear-gradient(135deg,#ff6b00,#ff8800)">📤 Submit Roll</button><button id="againBtn" onclick="again()" class="hidden" style="background:linear-gradient(135deg,#7c3aed,#a855f7)">Play Again</button><div id="endDiv" class="card hidden"><div class="end-message"><h2 id="endTitle"></h2><div class="prize-text" id="endPrize"></div></div></div></div></div></div><script>const API="${apiBase}";let tid=Math.random().toString(),mid=null;async function startGame(){const bet=parseFloat(document.getElementById('bet').value);if(isNaN(bet)||bet<1){alert('Please enter a valid bet');return}try{const r=await fetch(API+'/api/match/vs-bot',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telegramId:tid,username:'Player',betAmount:bet})});const d=await r.json();if(d.matchId){mid=d.matchId;document.getElementById('setup').classList.add('hidden');document.getElementById('game').classList.remove('hidden');document.getElementById('pot').textContent=d.pot;document.getElementById('p1val').textContent='';document.getElementById('p2val').textContent='';document.getElementById('result').textContent=''}}catch(e){alert('Error: '+e.message)}}async function roll(){const roll=prompt('Enter your dice roll (1-6):');if(!roll)return;const playerRoll=parseInt(roll);if(isNaN(playerRoll)||playerRoll<1||playerRoll>6){alert('Please enter a valid number 1-6');return}document.getElementById('p1dice').textContent='🎲';document.getElementById('p1val').textContent=playerRoll;try{const res=await fetch(API+'/api/match/'+mid+'/roll',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({telegramId:tid,roll:playerRoll})});const d=await res.json();document.getElementById('p2val').textContent=d.botRoll;if(d.playerRoll>d.botRoll){document.getElementById('result').innerHTML='<div style="color:#00ff00;font-size:20px">✓ You Won!</div>'}else{document.getElementById('result').innerHTML='<div style="color:#ff6b6b;font-size:20px">✗ Bot Won</div>'}document.getElementById('rollBtn').classList.add('hidden');document.getElementById('againBtn').classList.remove('hidden');document.getElementById('endDiv').classList.remove('hidden');document.getElementById('endTitle').textContent=d.winner===1?'🎉 YOU WON!':'😢 YOU LOST';document.getElementById('endPrize').textContent=d.winner===1?'Prize: $'+d.prize:'Better luck next time!';document.getElementById('balance').textContent='$'+d.newBalance}catch(e){alert('Error: '+e.message)}}function again(){document.getElementById('setup').classList.remove('hidden');document.getElementById('game').classList.add('hidden');document.getElementById('endDiv').classList.add('hidden');document.getElementById('rollBtn').classList.remove('hidden');document.getElementById('againBtn').classList.add('hidden');mid=null}</script></body></html>`);
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log('DICE RUSH on port ' + PORT));
+app.listen(PORT, () => console.log('🎲 DICE RUSH running on port ' + PORT));
+
 bot.launch({ allowedUpdates: ['message', 'callback_query'] }).catch(e => console.error(e));
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
