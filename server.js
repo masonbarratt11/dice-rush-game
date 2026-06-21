@@ -1,4 +1,3 @@
-// server.js - DICE RUSH with Fixed Dice Pips
 const express = require('express');
 const { Telegraf } = require('telegraf');
 require('dotenv').config();
@@ -17,135 +16,26 @@ const activeMatches = {};
 bot.start(async (ctx) => {
   const userId = ctx.from.id;
   const username = ctx.from.username || `User_${userId}`;
-
   if (!players[userId]) {
-    players[userId] = {
-      username,
-      balance: 100,
-      wins: 0,
-      losses: 0,
-      joinedAt: new Date()
-    };
+    players[userId] = { username, balance: 100, wins: 0, losses: 0, joinedAt: new Date() };
   }
-
-  await ctx.reply(`🎲 Welcome to DICE RUSH!\n\nYour balance: $${players[userId].balance}\n\nReady to roll?`, {
+  await ctx.reply(`🎲 Welcome to DICE RUSH!\n\nYour balance: $${players[userId].balance}`, {
     reply_markup: {
-      inline_keyboard: [
-        [{ text: '🎮 Play Game', url: process.env.GAME_URL || 'http://localhost:3001/game' }],
-        [{ text: '💰 Buy Coins', callback_data: 'buy_coins' }],
-        [{ text: '📊 Stats', callback_data: 'stats' }]
-      ]
+      inline_keyboard: [[{ text: '🎮 Play Game', url: process.env.GAME_URL || 'http://localhost:3001/game' }]]
     }
   });
-});
-
-bot.command('balance', (ctx) => {
-  const userId = ctx.from.id;
-  const balance = players[userId]?.balance || 0;
-  ctx.reply(`💰 Your Balance: $${balance.toFixed(2)}`);
-});
-
-bot.command('stats', (ctx) => {
-  const userId = ctx.from.id;
-  const player = players[userId];
-  if (!player) return ctx.reply('Not registered yet. Send /start first.');
-
-  const stats = `📊 YOUR STATS\n═══════════════\nUsername: ${player.username}\nBalance: $${player.balance.toFixed(2)}\nWins: ${player.wins}\nLosses: ${player.losses}\nWin Rate: ${player.wins + player.losses > 0 ? ((player.wins / (player.wins + player.losses)) * 100).toFixed(1) : 0}%`;
-  ctx.reply(stats);
-});
-
-bot.action('buy_coins', (ctx) => {
-  ctx.answerCbQuery();
-  ctx.reply('💳 Buy coins coming soon!', {
-    reply_markup: {
-      inline_keyboard: [[{ text: '🎮 Play Game', url: process.env.GAME_URL }]]
-    }
-  });
-});
-
-bot.action('stats', (ctx) => {
-  const userId = ctx.from.id;
-  const player = players[userId];
-  ctx.answerCbQuery();
-  const stats = `📊 YOUR STATS\n═══════════════\nUsername: ${player?.username}\nBalance: $${player?.balance.toFixed(2)}\nWins: ${player?.wins}\nLosses: ${player?.losses}`;
-  ctx.reply(stats);
-});
-
-app.get('/api/player/:telegramId', (req, res) => {
-  const { telegramId } = req.params;
-  const player = players[telegramId];
-  if (!player) return res.status(404).json({ error: 'Player not found' });
-  res.json(player);
-});
-
-app.post('/api/match/find', (req, res) => {
-  const { telegramId, username, betAmount } = req.body;
-  
-  if (!players[telegramId]) {
-    players[telegramId] = {
-      username: username || `User_${telegramId}`,
-      balance: 100,
-      wins: 0,
-      losses: 0,
-      joinedAt: new Date()
-    };
-  }
-  
-  if (players[telegramId].balance < betAmount) return res.status(400).json({ error: 'Insufficient balance' });
-  
-  if (!waitingQueue[betAmount]) waitingQueue[betAmount] = [];
-  
-  if (waitingQueue[betAmount].length > 0) {
-    const opponent = waitingQueue[betAmount].pop();
-    const matchId = `match_${Date.now()}`;
-    players[telegramId].balance -= betAmount;
-    players[opponent.telegramId].balance -= betAmount;
-    activeMatches[matchId] = {
-      matchId,
-      player1: { telegramId, username },
-      player2: opponent,
-      betAmount,
-      rounds: [],
-      status: 'active',
-      isBot: false,
-      createdAt: new Date()
-    };
-    
-    return res.json({
-      matchId,
-      opponent: opponent.username,
-      betAmount,
-      pot: betAmount * 2,
-      isBot: false
-    });
-  } else {
-    waitingQueue[betAmount].push({ telegramId, username });
-    return res.json({
-      status: 'waiting',
-      message: `Waiting for opponent at bet $${betAmount}...`,
-      queueLength: waitingQueue[betAmount].length
-    });
-  }
 });
 
 app.post('/api/match/vs-bot', (req, res) => {
   const { telegramId, username, betAmount } = req.body;
-  
   if (!players[telegramId]) {
-    players[telegramId] = {
-      username: username || `User_${telegramId}`,
-      balance: 100,
-      wins: 0,
-      losses: 0,
-      joinedAt: new Date()
-    };
+    players[telegramId] = { username: username || 'Player', balance: 100, wins: 0, losses: 0 };
   }
-  
-  if (players[telegramId].balance < betAmount) return res.status(400).json({ error: 'Insufficient balance' });
-  
-  const matchId = `match_bot_${Date.now()}`;
+  if (players[telegramId].balance < betAmount) {
+    return res.status(400).json({ error: 'Insufficient balance' });
+  }
+  const matchId = `match_${Date.now()}`;
   players[telegramId].balance -= betAmount;
-  
   activeMatches[matchId] = {
     matchId,
     player1: { telegramId, username },
@@ -155,22 +45,13 @@ app.post('/api/match/vs-bot', (req, res) => {
     status: 'active',
     isBot: true,
     player1Wins: 0,
-    player2Wins: 0,
-    createdAt: new Date()
+    player2Wins: 0
   };
-  
-  return res.json({
-    matchId,
-    opponent: 'Bot',
-    betAmount,
-    pot: betAmount * 2,
-    isBot: true
-  });
+  res.json({ matchId, opponent: 'Bot', betAmount, pot: betAmount * 2, isBot: true });
 });
 
 app.get('/api/match/:matchId', (req, res) => {
-  const { matchId } = req.params;
-  const match = activeMatches[matchId];
+  const match = activeMatches[req.params.matchId];
   if (!match) return res.status(404).json({ error: 'Match not found' });
   res.json(match);
 });
@@ -183,11 +64,6 @@ app.post('/api/match/:matchId/roll', (req, res) => {
   if (!match) return res.status(404).json({ error: 'Match not found' });
   if (roll < 1 || roll > 6) return res.status(400).json({ error: 'Invalid roll' });
   
-  const isPlayer1 = match.player1.telegramId === telegramId;
-  if (!isPlayer1 && match.player2.telegramId !== telegramId) {
-    return res.status(403).json({ error: 'Not part of this match' });
-  }
-  
   const roundNum = match.rounds.length + 1;
   let roundData = match.rounds[roundNum - 1];
   
@@ -196,325 +72,211 @@ app.post('/api/match/:matchId/roll', (req, res) => {
     match.rounds.push(roundData);
   }
   
-  if (isPlayer1) {
+  if (match.player1.telegramId === telegramId) {
     roundData.p1Roll = roll;
-  } else {
-    roundData.p2Roll = roll;
   }
   
-  if (match.isBot && isPlayer1 && roundData.p2Roll === null) {
+  if (match.isBot && roundData.p1Roll && !roundData.p2Roll) {
     roundData.p2Roll = Math.floor(Math.random() * 6) + 1;
   }
   
-  if (roundData.p1Roll !== null && roundData.p2Roll !== null) {
+  if (roundData.p1Roll && roundData.p2Roll) {
     if (roundData.p1Roll > roundData.p2Roll) {
       roundData.winner = 1;
-      match.player1Wins = (match.player1Wins || 0) + 1;
+      match.player1Wins++;
     } else if (roundData.p2Roll > roundData.p1Roll) {
       roundData.winner = 2;
-      match.player2Wins = (match.player2Wins || 0) + 1;
+      match.player2Wins++;
     } else {
       roundData.winner = 0;
     }
     
-    if ((match.player1Wins || 0) >= 2 || (match.player2Wins || 0) >= 2) {
+    if (match.player1Wins >= 2 || match.player2Wins >= 2) {
       match.status = 'completed';
-      const winner = (match.player1Wins || 0) >= 2 ? 1 : 2;
-      const winnerId = winner === 1 ? match.player1.telegramId : match.player2.telegramId;
+      const winner = match.player1Wins >= 2 ? 1 : 2;
+      const winnerId = winner === 1 ? match.player1.telegramId : 'bot';
       const prize = match.betAmount * 2 * 0.97;
       
       if (winnerId !== 'bot') {
         players[winnerId].balance += prize;
-        players[winnerId].wins += 1;
-      }
-      
-      const loserId = winner === 1 ? match.player2.telegramId : match.player1.telegramId;
-      if (loserId !== 'bot' && winnerId !== loserId) {
-        players[loserId].losses += 1;
+        players[winnerId].wins++;
       }
       
       return res.json({
         matchComplete: true,
         winner,
         prize: prize.toFixed(2),
-        newBalance: winnerId !== 'bot' ? players[winnerId].balance.toFixed(2) : '0',
-        match: match
+        newBalance: winnerId !== 'bot' ? players[winnerId].balance.toFixed(2) : '0'
       });
     }
   }
   
-  res.json({ roundData, match: match });
-});
-
-app.get('/api/leaderboard', (req, res) => {
-  const leaderboard = Object.values(players)
-    .sort((a, b) => b.wins - a.wins)
-    .slice(0, 10)
-    .map((player, idx) => ({
-      rank: idx + 1,
-      username: player.username,
-      wins: player.wins,
-      balance: player.balance.toFixed(2)
-    }));
-  res.json(leaderboard);
+  res.json({ roundData, match });
 });
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'DICE RUSH running!' });
+  res.json({ status: 'ok' });
 });
 
 app.get('/game', (req, res) => {
   const apiBase = process.env.GAME_URL ? process.env.GAME_URL.replace('/game', '') : 'https://dice-rush-game-production.up.railway.app';
-  
   res.send(`<!DOCTYPE html>
 <html>
 <head>
-  <title>DICE RUSH</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DICE RUSH</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: linear-gradient(135deg,#0f5f2f,#1a8c4d); color: white; font-family: Arial,sans-serif; padding: 16px; min-height: 100vh; }
+    body { background: linear-gradient(135deg,#0f5f2f,#1a8c4d); color: white; font-family: Arial; padding: 16px; min-height: 100vh; }
     .container { max-width: 500px; margin: 0 auto; }
-    h1 { text-align: center; font-size: 28px; margin-bottom: 16px; }
-    h2 { font-size: 20px; text-align: center; }
+    h1 { text-align: center; font-size: 28px; margin-bottom: 20px; }
     .card { background: rgba(0,0,0,0.3); padding: 16px; border-radius: 8px; margin-bottom: 12px; border: 1px solid #00ff00; }
-    .balance { font-size: 20px; font-weight: bold; color: #ffd700; }
+    .balance { font-size: 24px; font-weight: bold; color: #ffd700; }
     button { width: 100%; padding: 12px; background: linear-gradient(135deg,#ff6b00,#ff8800); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; margin-bottom: 8px; font-size: 14px; }
     button:hover { opacity: 0.9; }
-    button.bot-btn { background: linear-gradient(135deg,#7c3aed,#a855f7); }
-    .input { width: 100%; padding: 10px; background: #1a1a2e; border: 1px solid #ffd700; color: white; border-radius: 4px; margin-bottom: 8px; font-size: 14px; }
+    button.purple { background: linear-gradient(135deg,#7c3aed,#a855f7); }
+    input { width: 100%; padding: 10px; background: #1a1a2e; border: 1px solid #ffd700; color: white; border-radius: 4px; margin-bottom: 8px; font-size: 14px; }
     .hidden { display: none; }
-    .match-info { text-align: center; margin: 16px 0; }
-    .dice-container { display: flex; justify-content: center; align-items: center; gap: 20px; margin: 20px 0; }
-    .dice { width: 90px; height: 90px; background: linear-gradient(135deg,#f5f5f5,#ffffff); border: 2px solid #333; border-radius: 6px; display: grid; grid-template-columns: repeat(3,1fr); grid-template-rows: repeat(3,1fr); padding: 6px; gap: 3px; }
-    .pip { width: 14px; height: 14px; background: #ff0000; border-radius: 50%; }
-    .pip.hidden { background: transparent; }
-    .vs { font-size: 18px; color: #ffd700; font-weight: bold; }
-    .round-title { font-size: 12px; color: #ffd700; margin-bottom: 8px; }
+    .dice-container { display: flex; justify-content: center; gap: 20px; margin: 20px 0; }
+    .dice { width: 80px; height: 80px; background: white; border: 2px solid #333; border-radius: 6px; display: grid; grid-template-columns: repeat(3,1fr); padding: 6px; gap: 3px; }
+    .pip { width: 12px; height: 12px; background: red; border-radius: 50%; }
+    .pip.empty { background: transparent; }
+    .vs { font-size: 18px; color: #ffd700; font-weight: bold; align-self: center; }
   </style>
 </head>
 <body>
 <div class="container">
   <h1>🎲 DICE RUSH</h1>
-  
-  <div id="setupScreen" class="setup">
+  <div id="setup">
+    <div class="card"><div style="color:#888;font-size:12px;">Balance</div><div class="balance" id="balance">$100.00</div></div>
     <div class="card">
-      <div style="font-size:12px;color:#888;margin-bottom:4px;">Balance</div>
-      <div class="balance" id="balance">$100.00</div>
-    </div>
-    <div class="card">
-      <div style="font-size:12px;color:#ffd700;margin-bottom:8px;font-weight:bold;">Set Bet Amount</div>
-      <input type="number" id="betAmount" class="input" value="5" min="1" placeholder="Enter bet amount">
-      <button onclick="findOpponent()">🎯 Find Opponent</button>
-      <button class="bot-btn" onclick="playBot()">🤖 Play Bot</button>
+      <input type="number" id="bet" value="5" min="1" placeholder="Bet amount">
+      <button onclick="startBot()">🤖 Play Bot</button>
     </div>
   </div>
-  
-  <div id="gameScreen" class="gameplay hidden">
-    <div class="card match-info">
-      <h2 id="matchStatus">Match: 0-0</h2>
-      <div style="font-size:14px;color:#ffd700;margin-top:8px;">
-        <span id="player1Name">You</span> vs <span id="player2Name">Opponent</span>
-      </div>
-      <div style="font-size:12px;color:#888;margin-top:8px;">Pot: $<span id="potAmount">0</span></div>
-    </div>
-    
-    <div id="roundDisplay" class="card">
-      <div class="round-title">Round <span id="roundNum">1</span>/3</div>
+  <div id="game" class="hidden">
+    <div class="card" style="text-align:center;"><h2 id="status">Match: 0-0</h2><div id="opponent" style="color:#ffd700;margin-top:8px;">vs Bot</div><div style="color:#888;font-size:12px;margin-top:8px;">Pot: $<span id="pot">0</span></div></div>
+    <div class="card" style="text-align:center;">
+      <div style="color:#ffd700;font-size:12px;margin-bottom:8px;">Round <span id="round">1</span>/3</div>
       <div class="dice-container">
-        <div class="dice" id="p1Dice">
-          <div class="pip hidden"></div><div class="pip hidden"></div><div class="pip hidden"></div>
-          <div class="pip hidden"></div><div class="pip hidden"></div><div class="pip hidden"></div>
-          <div class="pip hidden"></div><div class="pip hidden"></div><div class="pip hidden"></div>
-        </div>
+        <div class="dice" id="d1"><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div></div>
         <div class="vs">vs</div>
-        <div class="dice" id="p2Dice">
-          <div class="pip hidden"></div><div class="pip hidden"></div><div class="pip hidden"></div>
-          <div class="pip hidden"></div><div class="pip hidden"></div><div class="pip hidden"></div>
-          <div class="pip hidden"></div><div class="pip hidden"></div><div class="pip hidden"></div>
-        </div>
+        <div class="dice" id="d2"><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div></div>
       </div>
-      <div id="roundResult" style="margin-top:12px;color:#00ff00;font-weight:bold;"></div>
+      <div id="result" style="margin-top:12px;color:#00ff00;font-weight:bold;"></div>
     </div>
-    
-    <button id="rollBtn" onclick="rollDice()">🎲 Roll Dice</button>
-    <button id="nextBtn" onclick="nextRound()" class="hidden">→ Next Round</button>
-    
-    <div id="matchResult" class="card hidden" style="text-align:center;">
-      <h2 id="resultText"></h2>
-      <div id="prizeText" style="margin-top:8px;font-size:16px;color:#ffd700;"></div>
-      <button id="playAgainBtn" onclick="playAgain()" class="bot-btn">🎮 Play Again</button>
-    </div>
+    <button id="rollBtn" onclick="roll()">🎲 Roll</button>
+    <button id="nextBtn" onclick="nextRound()" class="hidden">→ Next</button>
+    <div id="end" class="card hidden" style="text-align:center;"><h2 id="endText"></h2><div id="prize" style="color:#ffd700;margin-top:8px;"></div><button onclick="playAgain()" class="purple">Play Again</button></div>
   </div>
 </div>
-
 <script>
-const API_BASE = "${apiBase}";
-let telegramId = Math.random().toString();
-let matchId = null;
-let currentMatch = null;
-let isBot = false;
+const API = "${apiBase}";
+let tid = Math.random().toString();
+let mid = null;
+let match = null;
 
-function getDicePips(num) {
-  const pips = [false,false,false,false,false,false,false,false,false];
-  if(num === 1) { pips[4] = true; }
-  else if(num === 2) { pips[0] = true; pips[8] = true; }
-  else if(num === 3) { pips[0] = true; pips[4] = true; pips[8] = true; }
-  else if(num === 4) { pips[0] = true; pips[2] = true; pips[6] = true; pips[8] = true; }
-  else if(num === 5) { pips[0] = true; pips[2] = true; pips[4] = true; pips[6] = true; pips[8] = true; }
-  else if(num === 6) { pips[0] = true; pips[2] = true; pips[3] = true; pips[5] = true; pips[6] = true; pips[8] = true; }
-  return pips;
+function getDice(n) {
+  const p = [0,0,0,0,0,0,0,0,0];
+  if(n===1) p[4]=1;
+  else if(n===2) { p[0]=1; p[8]=1; }
+  else if(n===3) { p[0]=1; p[4]=1; p[8]=1; }
+  else if(n===4) { p[0]=1; p[2]=1; p[6]=1; p[8]=1; }
+  else if(n===5) { p[0]=1; p[2]=1; p[4]=1; p[6]=1; p[8]=1; }
+  else if(n===6) { p[0]=1; p[2]=1; p[3]=1; p[5]=1; p[6]=1; p[8]=1; }
+  return p;
 }
 
-function renderDice(elementId, num) {
-  const dice = document.getElementById(elementId);
-  const pips = getDicePips(num);
-  const pipElements = dice.querySelectorAll('.pip');
-  pipElements.forEach((pip, i) => {
-    if(pips[i]) {
-      pip.classList.remove('hidden');
-    } else {
-      pip.classList.add('hidden');
-    }
+function showDice(id, n) {
+  const p = getDice(n);
+  const pips = document.getElementById(id).querySelectorAll('.pip');
+  pips.forEach((pip, i) => {
+    pip.className = 'pip' + (p[i] ? '' : ' empty');
   });
 }
 
-async function findOpponent() {
-  const betAmount = parseFloat(document.getElementById("betAmount").value);
-  const apiUrl = API_BASE + "/api/match/find";
-  
+async function startBot() {
+  const bet = parseFloat(document.getElementById('bet').value);
   try {
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ telegramId: telegramId, username: "Player", betAmount: betAmount })
+    const res = await fetch(API + '/api/match/vs-bot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telegramId: tid, username: 'Player', betAmount: bet })
     });
-    const data = await response.json();
+    const data = await res.json();
     if(data.matchId) {
-      matchId = data.matchId;
-      isBot = false;
-      startGame(data);
-    } else {
-      alert(data.message || "Searching for opponent...");
+      mid = data.matchId;
+      document.getElementById('setup').classList.add('hidden');
+      document.getElementById('game').classList.remove('hidden');
+      document.getElementById('pot').textContent = data.pot;
+      loadMatch();
     }
-  } catch(error) {
-    alert("Error: " + error.message);
-  }
-}
-
-async function playBot() {
-  const betAmount = parseFloat(document.getElementById("betAmount").value);
-  const apiUrl = API_BASE + "/api/match/vs-bot";
-  
-  try {
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ telegramId: telegramId, username: "Player", betAmount: betAmount })
-    });
-    const data = await response.json();
-    if(data.matchId) {
-      matchId = data.matchId;
-      isBot = true;
-      startGame(data);
-    } else {
-      alert("Error: " + (data.error || "Could not start bot match"));
-    }
-  } catch(error) {
-    alert("Error: " + error.message);
-  }
-}
-
-function startGame(data) {
-  document.getElementById("setupScreen").classList.add("hidden");
-  document.getElementById("gameScreen").classList.remove("hidden");
-  document.getElementById("player1Name").textContent = "You";
-  document.getElementById("player2Name").textContent = data.opponent;
-  document.getElementById("potAmount").textContent = data.pot;
-  loadMatch();
+  } catch(e) { alert('Error: ' + e.message); }
 }
 
 async function loadMatch() {
   try {
-    const response = await fetch(API_BASE + "/api/match/" + matchId);
-    currentMatch = await response.json();
-    if(currentMatch && currentMatch.rounds) {
-      updateDisplay();
-    }
-  } catch(error) {
-    console.error("Error loading match:", error);
-  }
+    const res = await fetch(API + '/api/match/' + mid);
+    match = await res.json();
+    updateUI();
+  } catch(e) { console.error(e); }
 }
 
-async function rollDice() {
-  const roll = Math.floor(Math.random()*6)+1;
+async function roll() {
+  const n = Math.floor(Math.random()*6)+1;
   try {
-    const response = await fetch(API_BASE + "/api/match/" + matchId + "/roll", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ telegramId: telegramId, roll: roll })
+    const res = await fetch(API + '/api/match/' + mid + '/roll', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telegramId: tid, roll: n })
     });
-    const data = await response.json();
-    currentMatch = data.match;
-    updateDisplay();
-    if(data.matchComplete) {
-      showResult(data);
-    } else {
-      document.getElementById("rollBtn").classList.add("hidden");
-      document.getElementById("nextBtn").classList.remove("hidden");
-    }
-  } catch(error) {
-    alert("Error: " + error.message);
-  }
+    const data = await res.json();
+    match = data.match;
+    updateUI();
+    if(data.matchComplete) { endGame(data); }
+    else { document.getElementById('rollBtn').classList.add('hidden'); document.getElementById('nextBtn').classList.remove('hidden'); }
+  } catch(e) { alert('Error: ' + e.message); }
 }
 
 function nextRound() {
-  document.getElementById("rollBtn").classList.remove("hidden");
-  document.getElementById("nextBtn").classList.add("hidden");
-  renderDice("p1Dice", 0);
-  renderDice("p2Dice", 0);
-  document.getElementById("roundResult").textContent = "";
+  document.getElementById('rollBtn').classList.remove('hidden');
+  document.getElementById('nextBtn').classList.add('hidden');
+  showDice('d1', 0);
+  showDice('d2', 0);
+  document.getElementById('result').textContent = '';
 }
 
-function updateDisplay() {
-  if(!currentMatch || !currentMatch.rounds || currentMatch.rounds.length === 0) return;
-  const lastRound = currentMatch.rounds[currentMatch.rounds.length-1];
-  if(lastRound) {
-    document.getElementById("roundNum").textContent = lastRound.round;
-    if(lastRound.p1Roll) { renderDice("p1Dice", lastRound.p1Roll); }
-    if(lastRound.p2Roll) { renderDice("p2Dice", lastRound.p2Roll); }
-    
-    if(lastRound.winner === 1) {
-      document.getElementById("roundResult").textContent = "✓ You won this round!";
-    } else if(lastRound.winner === 2) {
-      document.getElementById("roundResult").textContent = "✗ Opponent won this round";
-    } else {
-      document.getElementById("roundResult").textContent = "= Tie!";
-    }
+function updateUI() {
+  if(!match || !match.rounds || match.rounds.length === 0) return;
+  const r = match.rounds[match.rounds.length-1];
+  if(r) {
+    document.getElementById('round').textContent = r.round;
+    if(r.p1Roll) showDice('d1', r.p1Roll);
+    if(r.p2Roll) showDice('d2', r.p2Roll);
+    if(r.winner === 1) document.getElementById('result').textContent = '✓ You won!';
+    else if(r.winner === 2) document.getElementById('result').textContent = '✗ Bot won';
+    else document.getElementById('result').textContent = '= Tie!';
   }
-  const p1Wins = currentMatch.player1Wins || 0;
-  const p2Wins = currentMatch.player2Wins || 0;
-  document.getElementById("matchStatus").textContent = "Match: " + p1Wins + "-" + p2Wins;
+  document.getElementById('status').textContent = 'Match: ' + (match.player1Wins||0) + '-' + (match.player2Wins||0);
 }
 
-function showResult(data) {
-  document.getElementById("rollBtn").classList.add("hidden");
-  document.getElementById("nextBtn").classList.add("hidden");
-  document.getElementById("roundDisplay").classList.add("hidden");
-  document.getElementById("matchResult").classList.remove("hidden");
-  const result = data.winner === 1 ? "🎉 YOU WON!" : "😢 YOU LOST";
-  document.getElementById("resultText").textContent = result;
-  document.getElementById("prizeText").textContent = data.winner === 1 ? "Prize: $" + data.prize : "Better luck next time!";
-  document.getElementById("balance").textContent = "$" + data.newBalance;
+function endGame(data) {
+  document.getElementById('rollBtn').classList.add('hidden');
+  document.getElementById('nextBtn').classList.add('hidden');
+  document.getElementById('game').querySelector('.card:nth-child(2)').classList.add('hidden');
+  document.getElementById('end').classList.remove('hidden');
+  document.getElementById('endText').textContent = data.winner === 1 ? '🎉 YOU WON!' : '😢 YOU LOST';
+  document.getElementById('prize').textContent = data.winner === 1 ? 'Prize: $' + data.prize : 'Better luck next time!';
+  document.getElementById('balance').textContent = '$' + data.newBalance;
 }
 
 function playAgain() {
-  document.getElementById("setupScreen").classList.remove("hidden");
-  document.getElementById("gameScreen").classList.add("hidden");
-  document.getElementById("roundDisplay").classList.remove("hidden");
-  document.getElementById("matchResult").classList.add("hidden");
-  matchId = null;
-  currentMatch = null;
+  document.getElementById('setup').classList.remove('hidden');
+  document.getElementById('game').classList.add('hidden');
+  document.getElementById('game').querySelector('.card:nth-child(2)').classList.remove('hidden');
+  document.getElementById('end').classList.add('hidden');
+  mid = null;
+  match = null;
 }
 </script>
 </body>
@@ -522,11 +284,8 @@ function playAgain() {
 });
 
 const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => console.log('DICE RUSH on port ' + PORT));
 
-app.listen(PORT, () => {
-  console.log('DICE RUSH running on port ' + PORT);
-});
-
-bot.launch({ allowedUpdates: ['message', 'callback_query'] }).catch(err => console.error(err));
+bot.launch({ allowedUpdates: ['message', 'callback_query'] }).catch(e => console.error(e));
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
