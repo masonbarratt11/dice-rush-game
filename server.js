@@ -1,4 +1,4 @@
-// server.js - DICE RUSH Backend Server (URL Button for Telegram)
+// server.js - DICE RUSH Backend Server (Bot Opponent Feature)
 const express = require('express');
 const { Telegraf } = require('telegraf');
 require('dotenv').config();
@@ -84,7 +84,7 @@ app.get('/api/player/:telegramId', (req, res) => {
 app.post('/api/match/find', (req, res) => {
   const { telegramId, username, betAmount } = req.body;
   
-  console.log(`[MATCH FIND] User: ${telegramId}, Bet: $${betAmount}, Queue: ${JSON.stringify(Object.keys(waitingQueue))}`);
+  console.log(`[MATCH FIND] User: ${telegramId}, Bet: $${betAmount}`);
   
   if (!players[telegramId]) {
     players[telegramId] = {
@@ -100,8 +100,6 @@ app.post('/api/match/find', (req, res) => {
   
   if (!waitingQueue[betAmount]) waitingQueue[betAmount] = [];
   
-  console.log(`[MATCH FIND] Current queue for $${betAmount}: ${waitingQueue[betAmount].length} players`);
-  
   if (waitingQueue[betAmount].length > 0) {
     const opponent = waitingQueue[betAmount].pop();
     const matchId = `match_${Date.now()}`;
@@ -114,26 +112,66 @@ app.post('/api/match/find', (req, res) => {
       betAmount,
       rounds: [],
       status: 'active',
+      isBot: false,
       createdAt: new Date()
     };
-    
-    console.log(`[MATCH FOUND] Match ${matchId}: ${telegramId} vs ${opponent.telegramId}`);
     
     return res.json({
       matchId,
       opponent: opponent.username,
       betAmount,
-      pot: betAmount * 2
+      pot: betAmount * 2,
+      isBot: false
     });
   } else {
     waitingQueue[betAmount].push({ telegramId, username });
-    console.log(`[MATCH WAITING] User ${telegramId} added to queue for $${betAmount}`);
     return res.json({
       status: 'waiting',
       message: `Waiting for opponent at bet $${betAmount}...`,
       queueLength: waitingQueue[betAmount].length
     });
   }
+});
+
+// Bot opponent
+app.post('/api/match/vs-bot', (req, res) => {
+  const { telegramId, username, betAmount } = req.body;
+  
+  console.log(`[BOT MATCH] User: ${telegramId}, Bet: $${betAmount}`);
+  
+  if (!players[telegramId]) {
+    players[telegramId] = {
+      username: username || `User_${telegramId}`,
+      balance: 100,
+      wins: 0,
+      losses: 0,
+      joinedAt: new Date()
+    };
+  }
+  
+  if (players[telegramId].balance < betAmount) return res.status(400).json({ error: 'Insufficient balance' });
+  
+  const matchId = `match_bot_${Date.now()}`;
+  players[telegramId].balance -= betAmount;
+  
+  activeMatches[matchId] = {
+    matchId,
+    player1: { telegramId, username },
+    player2: { telegramId: 'bot', username: '🤖 Bot' },
+    betAmount,
+    rounds: [],
+    status: 'active',
+    isBot: true,
+    createdAt: new Date()
+  };
+  
+  return res.json({
+    matchId,
+    opponent: '🤖 Bot',
+    betAmount,
+    pot: betAmount * 2,
+    isBot: true
+  });
 });
 
 app.post('/api/match/:matchId/roll', (req, res) => {
@@ -163,6 +201,11 @@ app.post('/api/match/:matchId/roll', (req, res) => {
     roundData.p2Roll = roll;
   }
   
+  // If bot match and player rolled, bot rolls automatically
+  if (match.isBot && isPlayer1 && roundData.p2Roll === null) {
+    roundData.p2Roll = Math.floor(Math.random() * 6) + 1;
+  }
+  
   if (roundData.p1Roll !== null && roundData.p2Roll !== null) {
     if (roundData.p1Roll > roundData.p2Roll) {
       roundData.winner = 1;
@@ -180,19 +223,21 @@ app.post('/api/match/:matchId/roll', (req, res) => {
       const winnerId = winner === 1 ? match.player1.telegramId : match.player2.telegramId;
       const prize = match.betAmount * 2 * 0.97;
       
-      players[winnerId].balance += prize;
-      players[winnerId].wins += 1;
+      if (winnerId !== 'bot') {
+        players[winnerId].balance += prize;
+        players[winnerId].wins += 1;
+      }
       
       const loserId = winner === 1 ? match.player2.telegramId : match.player1.telegramId;
-      players[loserId].losses += 1;
-      
-      console.log(`[MATCH COMPLETE] Winner: ${winnerId}, Prize: $${prize.toFixed(2)}`);
+      if (loserId !== 'bot' && winnerId !== loserId) {
+        players[loserId].losses += 1;
+      }
       
       return res.json({
         matchComplete: true,
         winner,
         prize: prize.toFixed(2),
-        newBalance: players[winnerId].balance.toFixed(2)
+        newBalance: winnerId !== 'bot' ? players[winnerId].balance.toFixed(2) : '0'
       });
     }
   }
@@ -277,6 +322,9 @@ app.get('/game', (req, res) => {
     button:hover {
       opacity: 0.9;
     }
+    button.bot-btn {
+      background: linear-gradient(135deg, #7c3aed, #a855f7);
+    }
     .input {
       width: 100%;
       padding: 10px;
@@ -300,6 +348,7 @@ app.get('/game', (req, res) => {
       <div style="font-size:12px;color:#ffd700;margin-bottom:8px;font-weight:bold;">Set Bet Amount</div>
       <input type="number" id="betAmount" class="input" value="5" min="1" placeholder="Enter bet amount">
       <button onclick="findOpponent()">🎯 Find Opponent</button>
+      <button class="bot-btn" onclick="playBot()">🤖 Play Bot</button>
     </div>
   </div>
   
@@ -313,14 +362,11 @@ app.get('/game', (req, res) => {
       const apiUrl = API_BASE + '/api/match/find';
       
       console.log('Finding opponent at:', apiUrl);
-      console.log('Bet amount:', betAmount);
       
       try {
         const response = await fetch(apiUrl, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             telegramId: telegramId,
             username: 'Player',
@@ -329,7 +375,6 @@ app.get('/game', (req, res) => {
         });
         
         const data = await response.json();
-        console.log('Response:', data);
         
         if (data.matchId) {
           matchId = data.matchId;
@@ -338,7 +383,34 @@ app.get('/game', (req, res) => {
           alert(data.message || 'Searching for opponent...');
         }
       } catch (error) {
-        console.error('Error:', error);
+        alert('Error: ' + error.message);
+      }
+    }
+    
+    async function playBot() {
+      const betAmount = parseFloat(document.getElementById('betAmount').value);
+      const apiUrl = API_BASE + '/api/match/vs-bot';
+      
+      try {
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            telegramId: telegramId,
+            username: 'Player',
+            betAmount: betAmount
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.matchId) {
+          matchId = data.matchId;
+          alert('🤖 Bot match started!\\nOpponent: ' + data.opponent + '\\nPot: $' + data.pot);
+        } else {
+          alert('Error: ' + (data.error || 'Could not start bot match'));
+        }
+      } catch (error) {
         alert('Error: ' + error.message);
       }
     }
@@ -350,19 +422,16 @@ app.get('/game', (req, res) => {
 const PORT = process.env.PORT || 3001;
 
 app.listen(PORT, () => {
-  console.log(`🎲 DICE RUSH Server running on port ${PORT}`);
-  console.log(`Game URL: http://localhost:${PORT}/game`);
+  console.log(\`🎲 DICE RUSH Server running on port \${PORT}\`);
 });
 
-// Launch bot with polling (long polling - bot asks Telegram for updates)
 bot.launch({
   allowedUpdates: ['message', 'callback_query']
 }).then(() => {
-  console.log('🤖 DICE RUSH Bot started with polling mode!');
+  console.log('🤖 DICE RUSH Bot started!');
 }).catch(err => {
   console.error('Bot launch error:', err);
 });
 
-// Graceful shutdown
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
