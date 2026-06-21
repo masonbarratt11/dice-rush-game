@@ -137,16 +137,25 @@ app.get('/game', (req, res) => {
     button.purple { background: linear-gradient(135deg,#7c3aed,#a855f7); }
     input { width: 100%; padding: 10px; background: #1a1a2e; border: 1px solid #ffd700; color: white; border-radius: 4px; margin-bottom: 8px; font-size: 14px; }
     .hidden { display: none; }
-    .dice-container { display: flex; justify-content: center; gap: 20px; margin: 20px 0; perspective: 1000px; }
-    .dice { width: 80px; height: 80px; background: white; border: 2px solid #333; border-radius: 6px; display: grid; grid-template-columns: repeat(3,1fr); padding: 6px; gap: 3px; transition: transform 0.3s ease-out; }
-    .dice.rolling { animation: roll 0.8s ease-out; }
-    @keyframes roll { 
-      0% { transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
-      100% { transform: rotateX(720deg) rotateY(720deg) rotateZ(720deg); }
-    }
-    .pip { width: 12px; height: 12px; background: red; border-radius: 50%; }
-    .pip.empty { background: transparent; }
-    .vs { font-size: 18px; color: #ffd700; font-weight: bold; align-self: center; }
+    
+    .dice-scene { display: flex; justify-content: center; gap: 30px; margin: 20px 0; perspective: 1200px; }
+    .dice-wrapper { width: 100px; height: 100px; position: relative; }
+    .dice { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform 0.6s ease-out; }
+    .dice.rolling { animation: roll 0.8s cubic-bezier(0.25,0.46,0.45,0.94); }
+    @keyframes roll { 0% { transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg); } 100% { transform: rotateX(720deg) rotateY(720deg); } }
+    
+    .face { position: absolute; width: 100%; height: 100%; background: linear-gradient(135deg,#f0f0f0,#ffffff); border: 2px solid #333; border-radius: 6px; display: flex; flex-wrap: wrap; align-content: center; justify-content: center; padding: 8px; gap: 6px; backface-visibility: hidden; }
+    .dot { width: 16px; height: 16px; background: #ff0000; border-radius: 50%; }
+    
+    .face1 { transform: translateZ(50px); }
+    .face2 { transform: rotateY(180deg) translateZ(50px); }
+    .face3 { transform: rotateY(90deg) translateZ(50px); }
+    .face4 { transform: rotateY(-90deg) translateZ(50px); }
+    .face5 { transform: rotateX(90deg) translateZ(50px); }
+    .face6 { transform: rotateX(-90deg) translateZ(50px); }
+    
+    .vs { font-size: 20px; color: #ffd700; font-weight: bold; align-self: center; }
+    .round-title { font-size: 12px; color: #ffd700; margin-bottom: 8px; }
   </style>
 </head>
 <body>
@@ -162,11 +171,11 @@ app.get('/game', (req, res) => {
   <div id="game" class="hidden">
     <div class="card" style="text-align:center;"><h2 id="status">Match: 0-0</h2><div id="opponent" style="color:#ffd700;margin-top:8px;">vs Bot</div><div style="color:#888;font-size:12px;margin-top:8px;">Pot: $<span id="pot">0</span></div></div>
     <div class="card" style="text-align:center;">
-      <div style="color:#ffd700;font-size:12px;margin-bottom:8px;">Round <span id="round">1</span>/3</div>
-      <div class="dice-container">
-        <div class="dice" id="d1"><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div></div>
+      <div class="round-title">Round <span id="round">1</span>/3</div>
+      <div class="dice-scene">
+        <div class="dice-wrapper"><div class="dice" id="d1"><div class="face face1"><div class="dot"></div></div><div class="face face2"><div class="dot"></div><div class="dot"></div><div style="width:100%;height:0;"></div><div class="dot"></div><div class="dot"></div></div><div class="face face3"><div class="dot"></div><div class="dot"></div><div style="width:100%;height:0;"></div><div class="dot"></div><div class="dot"></div><div style="width:100%;height:0;"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div><div class="face face4"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div><div class="face face5"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div><div class="face face6"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div></div></div>
         <div class="vs">vs</div>
-        <div class="dice" id="d2"><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div><div class="pip empty"></div></div>
+        <div class="dice-wrapper"><div class="dice" id="d2"><div class="face face1"><div class="dot"></div></div><div class="face face2"><div class="dot"></div><div class="dot"></div><div style="width:100%;height:0;"></div><div class="dot"></div><div class="dot"></div></div><div class="face face3"><div class="dot"></div><div class="dot"></div><div style="width:100%;height:0;"></div><div class="dot"></div><div class="dot"></div><div style="width:100%;height:0;"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div><div class="face face4"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div><div class="face face5"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div><div class="face face6"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div></div></div>
       </div>
       <div id="result" style="margin-top:12px;color:#00ff00;font-weight:bold;"></div>
     </div>
@@ -181,24 +190,14 @@ let tid = Math.random().toString();
 let mid = null;
 let match = null;
 
-function getDice(n) {
-  const p = [0,0,0,0,0,0,0,0,0];
-  if(n===1) p[4]=1;
-  else if(n===2) { p[0]=1; p[8]=1; }
-  else if(n===3) { p[0]=1; p[4]=1; p[8]=1; }
-  else if(n===4) { p[0]=1; p[2]=1; p[6]=1; p[8]=1; }
-  else if(n===5) { p[0]=1; p[2]=1; p[4]=1; p[6]=1; p[8]=1; }
-  else if(n===6) { p[0]=1; p[2]=1; p[3]=1; p[5]=1; p[6]=1; p[8]=1; }
-  return p;
-}
-
-function showDice(id, n) {
-  const p = getDice(n);
-  const pips = document.getElementById(id).querySelectorAll('.pip');
-  pips.forEach((pip, i) => {
-    pip.className = 'pip' + (p[i] ? '' : ' empty');
-  });
-}
+const rotations = {
+  1: { x: 0, y: 0 },
+  2: { x: 0, y: 180 },
+  3: { x: 0, y: 90 },
+  4: { x: 0, y: -90 },
+  5: { x: 90, y: 0 },
+  6: { x: -90, y: 0 }
+};
 
 async function startBot() {
   const bet = parseFloat(document.getElementById('bet').value);
@@ -242,6 +241,7 @@ async function roll() {
     setTimeout(() => {
       document.getElementById('d1').classList.remove('rolling');
       document.getElementById('d2').classList.remove('rolling');
+      showDice();
       updateUI();
       if(data.matchComplete) { endGame(data); }
       else { document.getElementById('rollBtn').classList.add('hidden'); document.getElementById('nextBtn').classList.remove('hidden'); }
@@ -249,11 +249,24 @@ async function roll() {
   } catch(e) { alert('Error: ' + e.message); }
 }
 
+function showDice() {
+  if(!match || !match.rounds || match.rounds.length === 0) return;
+  const r = match.rounds[match.rounds.length-1];
+  if(r && r.p1Roll) {
+    const rot = rotations[r.p1Roll];
+    document.getElementById('d1').style.transform = `rotateX(${rot.x}deg) rotateY(${rot.y}deg)`;
+  }
+  if(r && r.p2Roll) {
+    const rot = rotations[r.p2Roll];
+    document.getElementById('d2').style.transform = `rotateX(${rot.x}deg) rotateY(${rot.y}deg)`;
+  }
+}
+
 function nextRound() {
   document.getElementById('rollBtn').classList.remove('hidden');
   document.getElementById('nextBtn').classList.add('hidden');
-  showDice('d1', 0);
-  showDice('d2', 0);
+  document.getElementById('d1').style.transform = 'rotateX(0deg) rotateY(0deg)';
+  document.getElementById('d2').style.transform = 'rotateX(0deg) rotateY(0deg)';
   document.getElementById('result').textContent = '';
 }
 
@@ -262,8 +275,6 @@ function updateUI() {
   const r = match.rounds[match.rounds.length-1];
   if(r) {
     document.getElementById('round').textContent = r.round;
-    if(r.p1Roll) showDice('d1', r.p1Roll);
-    if(r.p2Roll) showDice('d2', r.p2Roll);
     if(r.winner === 1) document.getElementById('result').textContent = '✓ You won!';
     else if(r.winner === 2) document.getElementById('result').textContent = '✗ Bot won';
     else document.getElementById('result').textContent = '= Tie!';
