@@ -1,4 +1,4 @@
-// server.js - DICE RUSH Backend Server (Fixed Game URLs)
+// server.js - DICE RUSH Backend Server (URL Button for Telegram)
 const express = require('express');
 const { Telegraf } = require('telegraf');
 require('dotenv').config();
@@ -33,7 +33,7 @@ bot.start(async (ctx) => {
   await ctx.reply(`🎲 Welcome to DICE RUSH!\n\nYour balance: $${players[userId].balance}\n\nReady to roll?`, {
     reply_markup: {
       inline_keyboard: [
-        [{ text: '🎮 Play Game', web_app: { url: process.env.GAME_URL || 'http://localhost:3001/game' } }],
+        [{ text: '🎮 Play Game', url: process.env.GAME_URL || 'http://localhost:3001/game' }],
         [{ text: '💰 Buy Coins', callback_data: 'buy_coins' }],
         [{ text: '📊 Stats', callback_data: 'stats' }]
       ]
@@ -60,7 +60,7 @@ bot.action('buy_coins', (ctx) => {
   ctx.answerCbQuery();
   ctx.reply('💳 Buy coins coming soon!', {
     reply_markup: {
-      inline_keyboard: [[{ text: '🎮 Play Game', web_app: { url: process.env.GAME_URL } }]]
+      inline_keyboard: [[{ text: '🎮 Play Game', url: process.env.GAME_URL }]]
     }
   });
 });
